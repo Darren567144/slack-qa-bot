@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: slack-qa-extractor
+spec:
+  schedule: "0 2 * * *"          # 02:00 cluster time daily
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: extractor
+              image: ghcr.io/<you>/slack-qa:latest
+              env:
+                - name: SLACK_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: slack-qa-secret
+                      key: bot_token
+                - name: SLACK_CHANNELS   # comma-separated list
+                  value: "C01AAA11,C02BBB22"
+                - name: OUTPUT_DIR
+                  value: "/data"
+              volumeMounts:
+                - name: qa-output
+                  mountPath: /data
+          volumes:
+            - name: qa-output
+              persistentVolumeClaim:
+                claimName: qa-pvc           # or use an object-storage CSI driver
