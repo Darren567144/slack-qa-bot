@@ -7,6 +7,8 @@ import os
 import sys
 import logging
 from pathlib import Path
+from threading import Thread
+from flask import Flask, jsonify
 
 # Add current directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -37,6 +39,24 @@ def check_environment():
     logger.info("✅ All required environment variables found")
     return True
 
+def create_health_server():
+    """Create Flask health check server for Render."""
+    app = Flask(__name__)
+    
+    @app.route('/')
+    def health_check():
+        return jsonify({
+            'status': 'healthy',
+            'service': 'slack-qa-bot',
+            'message': 'Bot is running'
+        })
+    
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'ok'})
+    
+    return app
+
 def main():
     """Start the Slack Q&A bot."""
     try:
@@ -52,6 +72,18 @@ def main():
             logger.info(f"🐘 Using PostgreSQL database: {database_url[:50]}...")
         else:
             logger.info("📁 No DATABASE_URL found, will use SQLite fallback")
+        
+        # Start health server for Render
+        port = int(os.environ.get('PORT', 5000))
+        app = create_health_server()
+        
+        def run_flask():
+            app.run(host='0.0.0.0', port=port, debug=False)
+        
+        # Start Flask server in background thread
+        flask_thread = Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        logger.info(f"🌐 Health server started on port {port}")
         
         # Import and start the bot
         logger.info("🔄 Initializing real-time Q&A monitor...")
