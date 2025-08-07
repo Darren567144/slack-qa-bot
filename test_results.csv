@@ -1,0 +1,6 @@
+question,answer,question_user,answer_user,channel,timestamp
+"Which platform would you recommend for deployment, Heroku or Render?",I'd go with Render. It has better free tier limits and easier Python setup.,Alice,Bob,#deployment-help,2025-08-06T16:32:59.226641
+How do I get started with Render?,Just connect your GitHub repo and set your build/start commands. Super simple!,Alice,Bob,#deployment-help,2025-08-06T16:32:59.226940
+How do I check which queries need indexes?,Use EXPLAIN ANALYZE on your slow queries. It'll show you where the bottlenecks are.,David,Eve,#database-issues,2025-08-06T16:32:59.227291
+What's our process for code reviews?,We use GitHub PRs. Just push your branch and create a pull request.,Grace,Henry,#code-review-process,2025-08-06T16:32:59.227630
+What testing framework do we use?,pytest for Python. We have examples in the tests/ directory.,Jack,Kate,#testing-strategies,2025-08-06T16:32:59.227924
