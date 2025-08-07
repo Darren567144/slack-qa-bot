@@ -4,8 +4,9 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python start.py
+    # Add persistent disk for SQLite database
     disk:
-      name: qa-bot-disk
+      name: qa-bot-data
       mountPath: /opt/render/project/data
       sizeGB: 1
     envVars:

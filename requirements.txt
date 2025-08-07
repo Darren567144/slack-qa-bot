@@ -6,8 +6,8 @@ tqdm==4.66.1
 openai==1.35.0
 flask==2.3.3
 
-# Database - PostgreSQL support
-psycopg2-binary==2.9.7
+# Database dependencies
+psycopg[binary]==3.2.3
 
 # Testing dependencies  
 pytest==7.4.0

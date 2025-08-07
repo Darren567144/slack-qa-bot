@@ -14,7 +14,7 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 
 from config.config_manager import get_required_env_vars, PipelineConfig
-from database.production_database import ProductionDatabaseManager as DatabaseManager
+from database.database_manager import DatabaseManager
 from core.openai_analyzer import OpenAIAnalyzer
 from core.message_processor import MessageProcessor
 

@@ -39,30 +39,23 @@ class ProductionDatabaseManager:
     def _setup_postgresql(self):
         """Set up PostgreSQL connection."""
         try:
-            import psycopg2
-            from urllib.parse import urlparse
+            import psycopg
             
-            # Parse DATABASE_URL
-            url = urlparse(self.database_url)
-            
-            self.conn_params = {
-                'host': url.hostname,
-                'port': url.port,
-                'database': url.path[1:],  # Remove leading slash
-                'user': url.username,
-                'password': url.password
-            }
-            
-            # Test connection
-            conn = psycopg2.connect(**self.conn_params)
+            # Test connection with DATABASE_URL directly
+            conn = psycopg.connect(self.database_url)
             conn.close()
+            
+            # Store connection string for later use
+            self.postgres_url = self.database_url
             
             # Initialize tables
             self._init_postgres_tables()
             
         except ImportError:
-            print("❌ psycopg2 not found. Install with: pip install psycopg2-binary")
-            raise
+            print("❌ psycopg not found. Install with: pip install psycopg[binary]")
+            print("Falling back to SQLite...")
+            self.is_postgres = False
+            self._setup_sqlite()
         except Exception as e:
             print(f"❌ PostgreSQL connection failed: {e}")
             print("Falling back to SQLite...")
@@ -79,9 +72,9 @@ class ProductionDatabaseManager:
     
     def _init_postgres_tables(self):
         """Initialize PostgreSQL tables."""
-        import psycopg2
+        import psycopg
         
-        conn = psycopg2.connect(**self.conn_params)
+        conn = psycopg.connect(self.postgres_url)
         cursor = conn.cursor()
         
         # Create tables with PostgreSQL syntax
@@ -223,10 +216,10 @@ class ProductionDatabaseManager:
     
     def _store_qa_pair_postgres(self, qa_data: Dict) -> Optional[int]:
         """Store Q&A pair in PostgreSQL."""
-        import psycopg2
+        import psycopg
         
         try:
-            conn = psycopg2.connect(**self.conn_params)
+            conn = psycopg.connect(self.postgres_url)
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -300,10 +293,10 @@ class ProductionDatabaseManager:
     
     def _get_qa_pairs_postgres(self, channel: Optional[str], limit: int) -> List[Dict]:
         """Get Q&A pairs from PostgreSQL."""
-        import psycopg2
+        import psycopg
         
         try:
-            conn = psycopg2.connect(**self.conn_params)
+            conn = psycopg.connect(self.postgres_url)
             cursor = conn.cursor()
             
             if channel:
@@ -385,10 +378,10 @@ class ProductionDatabaseManager:
     
     def _get_statistics_postgres(self) -> Dict:
         """Get statistics from PostgreSQL."""
-        import psycopg2
+        import psycopg
         
         try:
-            conn = psycopg2.connect(**self.conn_params)
+            conn = psycopg.connect(self.postgres_url)
             cursor = conn.cursor()
             
             cursor.execute("SELECT COUNT(*) FROM qa_pairs")
