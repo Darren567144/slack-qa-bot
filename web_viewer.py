@@ -12,11 +12,7 @@ import tempfile
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-try:
-    from database.cloud_database_manager import CloudDatabaseManager as DatabaseManager
-except ImportError:
-    print("Using SQLite fallback")
-    from database.database_manager import DatabaseManager
+from database.database_manager import DatabaseManager
 
 app = Flask(__name__)
 

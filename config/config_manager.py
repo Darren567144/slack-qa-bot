@@ -84,8 +84,14 @@ class PipelineConfig:
         self.ANSWER_TIMEOUT_HOURS = 24  # How long to wait for answers to questions
         self.PROCESS_MESSAGE_DELAY = 2.0  # Delay before processing new messages (avoid editing)
         
-        # Database configuration
-        self.DATABASE_PATH = self.OUTPUT_DIR / "qa_database.db"
+        # Database configuration - use persistent storage if available
+        database_path = os.environ.get('DATABASE_PATH')
+        if database_path:
+            self.DATABASE_PATH = Path(database_path)
+            # Ensure the directory exists
+            self.DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            self.DATABASE_PATH = self.OUTPUT_DIR / "qa_database.db"
         
         # Ensure output directory exists
         self.OUTPUT_DIR.mkdir(exist_ok=True, parents=True)

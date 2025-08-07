@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: qa-slackbot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start.py
+    disk:
+      name: qa-bot-disk
+      mountPath: /opt/render/project/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /opt/render/project/data/qa_database.db
