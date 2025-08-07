@@ -1,4 +1,5 @@
 slack-sdk==3.27.0
+slack-bolt>=1.18.0
 python-dateutil
 tqdm
 openai>=1.0.0

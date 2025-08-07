@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from config.config_manager import PipelineConfig
@@ -38,7 +39,7 @@ class Question(Base):
     timestamp = Column(DateTime)
     message_ts = Column(String(50), unique=True)
     confidence_score = Column(Float)
-    metadata = Column(JSONB)
+    meta_data = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship to answers
@@ -65,7 +66,7 @@ class Answer(Base):
     timestamp = Column(DateTime)
     message_ts = Column(String(50), unique=True)
     confidence_score = Column(Float)
-    metadata = Column(JSONB)
+    meta_data = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship to question
@@ -91,7 +92,7 @@ class QAPair(Base):
     channel = Column(String(50))
     timestamp = Column(DateTime)
     confidence_score = Column(Float)
-    metadata = Column(JSONB)
+    meta_data = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Indexes
@@ -127,11 +128,11 @@ class CloudDatabaseManager:
         self.database_url = (
             database_url or 
             os.environ.get('DATABASE_URL') or 
-            self.config.DATABASE_PATH
+            str(self.config.DATABASE_PATH)
         )
         
         # Determine database type
-        self.is_postgres = self.database_url.startswith(('postgresql://', 'postgres://'))
+        self.is_postgres = str(self.database_url).startswith(('postgresql://', 'postgres://'))
         
         if self.is_postgres:
             # PostgreSQL setup
@@ -139,6 +140,9 @@ class CloudDatabaseManager:
         else:
             # Fallback to SQLite for local development
             self._setup_sqlite()
+        
+        # Add db_path for compatibility with local database manager
+        self.db_path = self.database_url
     
     def _setup_postgresql(self):
         """Set up PostgreSQL connection."""
@@ -201,7 +205,7 @@ class CloudDatabaseManager:
                 channel=qa_data.get('channel', ''),
                 timestamp=self._parse_timestamp(qa_data.get('timestamp')),
                 confidence_score=qa_data.get('confidence_score', 0.0),
-                metadata=qa_data.get('metadata', {})
+                meta_data=qa_data.get('metadata', {})
             )
             
             session.add(qa_pair)
@@ -234,7 +238,7 @@ class CloudDatabaseManager:
                 timestamp=self._parse_timestamp(question_data.get('timestamp')),
                 message_ts=question_data.get('message_ts', ''),
                 confidence_score=question_data.get('confidence_score', 0.0),
-                metadata=question_data.get('metadata', {})
+                meta_data=question_data.get('metadata', {})
             )
             
             session.add(question)
@@ -273,7 +277,7 @@ class CloudDatabaseManager:
                 timestamp=self._parse_timestamp(answer_data.get('timestamp')),
                 message_ts=answer_data.get('message_ts', ''),
                 confidence_score=answer_data.get('confidence_score', 0.0),
-                metadata=answer_data.get('metadata', {})
+                meta_data=answer_data.get('metadata', {})
             )
             
             session.add(answer)
