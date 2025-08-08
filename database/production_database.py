@@ -465,10 +465,114 @@ class ProductionDatabaseManager:
         # Implementation would be similar to store_qa_pair
         pass
     
-    def find_recent_questions(self, channel_id: str, hours: int = 24) -> List[Dict]:
-        """Find recent unanswered questions."""
-        # Implementation would query recent questions
-        pass
+    def find_recent_questions(self, channel_id: str, hours: Optional[int] = 24) -> List[Dict]:
+        """Find unanswered questions in a channel. If hours=None, get ALL unanswered questions."""
+        if self.is_postgres:
+            return self._find_recent_questions_postgres(channel_id, hours)
+        else:
+            return self._find_recent_questions_sqlite(channel_id, hours)
+    
+    def _find_recent_questions_postgres(self, channel_id: str, hours: Optional[int]) -> List[Dict]:
+        """Find unanswered questions in PostgreSQL."""
+        import psycopg
+        
+        try:
+            conn = psycopg.connect(self.postgres_url)
+            cursor = conn.cursor()
+            
+            if hours is None:
+                # Get ALL unanswered questions (no time limit)
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = %s 
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id,))
+            else:
+                # Get recent unanswered questions within time window
+                cutoff_time = datetime.now() - timedelta(hours=hours)
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = %s 
+                      AND q.timestamp > %s
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id, cutoff_time))
+            
+            questions = []
+            for row in cursor.fetchall():
+                questions.append({
+                    'id': row[0],
+                    'text': row[1],
+                    'user_id': row[2],
+                    'user_name': row[3],
+                    'timestamp': row[4],
+                    'message_ts': row[5],
+                    'confidence_score': row[6]
+                })
+            
+            cursor.close()
+            conn.close()
+            return questions
+            
+        except Exception as e:
+            print(f"❌ Error finding questions in PostgreSQL: {e}")
+            return []
+    
+    def _find_recent_questions_sqlite(self, channel_id: str, hours: Optional[int]) -> List[Dict]:
+        """Find unanswered questions in SQLite."""
+        import sqlite3
+        
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            if hours is None:
+                # Get ALL unanswered questions (no time limit)
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = ? 
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id,))
+            else:
+                # Get recent unanswered questions within time window
+                cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = ? 
+                      AND q.timestamp > ?
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id, cutoff_time))
+            
+            questions = []
+            for row in cursor.fetchall():
+                questions.append({
+                    'id': row[0],
+                    'text': row[1],
+                    'user_id': row[2],
+                    'user_name': row[3],
+                    'timestamp': row[4],
+                    'message_ts': row[5],
+                    'confidence_score': row[6]
+                })
+            
+            cursor.close()
+            conn.close()
+            return questions
+            
+        except Exception as e:
+            print(f"❌ Error finding questions in SQLite: {e}")
+            return []
     
     def is_message_processed(self, message_ts: str) -> bool:
         """Check if message was processed."""

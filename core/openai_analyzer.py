@@ -155,3 +155,97 @@ Return ONLY a JSON object:
         except Exception as e:
             print(f"❌ Answer analysis error: {e}")
             return {"is_answer": False, "confidence": 0.0, "answer_quality": "irrelevant"}
+    
+    def find_similar_question(self, new_question: str, existing_questions: list) -> dict:
+        """Find if a new question is similar to any existing questions."""
+        try:
+            questions_text = "\n".join([
+                f"ID: {q['id']} - {q['text']}" for q in existing_questions[:10]  # Limit to avoid token overflow
+            ])
+            
+            response = openai.chat.completions.create(
+                model=self.config.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Analyze if the new question is similar to any existing questions.
+Look for:
+- Same topic/subject matter
+- Follow-up questions to the same issue
+- Rephrased versions of the same question
+- Related questions that could be clustered together
+
+Return ONLY a JSON object:
+{"is_similar": true/false, "similarity_score": 0.0-1.0, "question_id": id_number_or_null, "reason": "explanation"}
+
+Use high similarity threshold (0.8+) for true matches."""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"New Question: {new_question}\n\nExisting Questions:\n{questions_text}"
+                    }
+                ],
+                max_tokens=200,
+                temperature=0.1
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            if result_text.startswith("```json"):
+                result_text = result_text[7:]
+            if result_text.endswith("```"):
+                result_text = result_text[:-3]
+            result_text = result_text.strip()
+            
+            try:
+                return json.loads(result_text)
+            except json.JSONDecodeError:
+                return {"is_similar": False, "similarity_score": 0.0, "question_id": None}
+                
+        except Exception as e:
+            print(f"❌ Similar question analysis error: {e}")
+            return {"is_similar": False, "similarity_score": 0.0, "question_id": None}
+    
+    def generalize_questions(self, original_question: str, new_question: str) -> dict:
+        """Create a generalized version that covers both related questions."""
+        try:
+            response = openai.chat.completions.create(
+                model=self.config.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Create a generalized question that covers both the original and new question.
+The generalized version should:
+- Capture the core intent of both questions
+- Be more broadly applicable
+- Remove specific details that make it too narrow
+- Maintain the essential information need
+
+Return ONLY a JSON object:
+{"generalized_text": "generalized question", "covers_both": true/false, "explanation": "why this works"}"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Original Question: {original_question}\n\nNew Related Question: {new_question}"
+                    }
+                ],
+                max_tokens=200,
+                temperature=0.2
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            if result_text.startswith("```json"):
+                result_text = result_text[7:]
+            if result_text.endswith("```"):
+                result_text = result_text[:-3]
+            result_text = result_text.strip()
+            
+            try:
+                return json.loads(result_text)
+            except json.JSONDecodeError:
+                return {"generalized_text": original_question, "covers_both": False}
+                
+        except Exception as e:
+            print(f"❌ Question generalization error: {e}")
+            return {"generalized_text": original_question, "covers_both": False}

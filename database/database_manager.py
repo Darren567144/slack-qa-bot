@@ -149,21 +149,33 @@ class DatabaseManager:
             ))
             return cursor.lastrowid
     
-    def find_recent_questions(self, channel_id: str, hours: int = 24) -> List[Dict]:
-        """Find recent unanswered questions in a channel."""
-        cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
-        
+    def find_recent_questions(self, channel_id: str, hours: Optional[int] = 24) -> List[Dict]:
+        """Find unanswered questions in a channel. If hours=None, get ALL unanswered questions."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
-                FROM questions q
-                LEFT JOIN answers a ON q.id = a.question_id
-                WHERE q.channel_id = ? 
-                  AND q.timestamp > ?
-                  AND a.id IS NULL
-                ORDER BY q.timestamp DESC
-            """, (channel_id, cutoff_time))
+            
+            if hours is None:
+                # Get ALL unanswered questions (no time limit)
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = ? 
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id,))
+            else:
+                # Get recent unanswered questions within time window
+                cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+                cursor.execute("""
+                    SELECT q.id, q.text, q.user_id, q.user_name, q.timestamp, q.message_ts, q.confidence_score
+                    FROM questions q
+                    LEFT JOIN answers a ON q.id = a.question_id
+                    WHERE q.channel_id = ? 
+                      AND q.timestamp > ?
+                      AND a.id IS NULL
+                    ORDER BY q.timestamp DESC
+                """, (channel_id, cutoff_time))
             
             questions = []
             for row in cursor.fetchall():
@@ -177,6 +189,51 @@ class DatabaseManager:
                     'confidence_score': row[6]
                 })
             return questions
+    
+    def get_question_by_id(self, question_id: int) -> Optional[Dict]:
+        """Get a specific question by ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, text, user_id, user_name, channel_id, timestamp, message_ts, confidence_score, metadata
+                FROM questions WHERE id = ?
+            """, (question_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'id': row[0],
+                    'text': row[1],
+                    'user_id': row[2],
+                    'user_name': row[3],
+                    'channel_id': row[4],
+                    'timestamp': row[5],
+                    'message_ts': row[6],
+                    'confidence_score': row[7],
+                    'metadata': row[8]
+                }
+            return None
+    
+    def update_question(self, question_id: int, text: Optional[str] = None, metadata: Optional[Dict] = None):
+        """Update a question's text and/or metadata."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            updates = []
+            params = []
+            
+            if text is not None:
+                updates.append("text = ?")
+                params.append(text)
+                
+            if metadata is not None:
+                updates.append("metadata = ?")
+                params.append(json.dumps(metadata))
+                
+            if updates:
+                query = f"UPDATE questions SET {', '.join(updates)} WHERE id = ?"
+                params.append(question_id)
+                cursor.execute(query, params)
     
     def is_message_processed(self, message_ts: str) -> bool:
         """Check if a message has already been processed."""

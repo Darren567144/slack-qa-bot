@@ -4,6 +4,7 @@ Real-time Slack message monitoring and Q&A detection using Socket Mode.
 """
 import time
 import threading
+import json
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from typing import Dict, List, Optional
@@ -140,32 +141,39 @@ class RealtimeQAMonitor:
         # Check if it's a question
         question_analysis = self.openai_analyzer.is_question(message_text)
         
-        if question_analysis.get("is_question", False) and \
-           question_analysis.get("confidence", 0) >= self.config.QUESTION_DETECTION_THRESHOLD:
+        if question_analysis.get("is_question", False):
+            # Always store questions regardless of confidence threshold
             
             print(f"❓ Detected question (confidence: {question_analysis['confidence']:.2f}): {message_text[:100]}...")
             
-            # Store question in database
-            question_data = {
-                "text": message_text,
-                "user_id": user_id,
-                "user_name": user_name,
-                "channel_id": channel_id,
-                "timestamp": timestamp,
-                "message_ts": message_ts,
-                "confidence_score": question_analysis["confidence"],
-                "metadata": {
-                    "question_type": question_analysis.get("question_type", "unknown"),
-                    "detected_at": datetime.now().isoformat()
-                }
-            }
+            # Check for similar existing questions to potentially merge/cluster
+            similar_question_id = self.find_similar_question(channel_id, message_text, question_analysis)
             
-            question_id = self.db_manager.store_question(question_data)
-            print(f"✅ Stored question with ID: {question_id}")
+            if similar_question_id:
+                print(f"🔗 Found similar question {similar_question_id}, updating existing question")
+                self.update_clustered_question(similar_question_id, message_text, user_name, timestamp)
+            else:
+                # Store new question in database
+                question_data = {
+                    "text": message_text,
+                    "user_id": user_id,
+                    "user_name": user_name,
+                    "channel_id": channel_id,
+                    "timestamp": timestamp,
+                    "message_ts": message_ts,
+                    "confidence_score": question_analysis["confidence"],
+                    "metadata": {
+                        "question_type": question_analysis.get("question_type", "unknown"),
+                        "detected_at": datetime.now().isoformat(),
+                        "original_text": message_text
+                    }
+                }
+                
+                question_id = self.db_manager.store_question(question_data)
+                print(f"✅ Stored new question with ID: {question_id}")
         
-        else:
-            # Check if it might be an answer to recent questions
-            self.check_for_answers(message_data, user_name)
+        # Always check if message could be an answer (even if it's also a question)
+        self.check_for_answers(message_data, user_name)
     
     def check_for_answers(self, message_data: Dict, user_name: str):
         """Check if a message answers any recent questions in the channel."""
@@ -175,9 +183,9 @@ class RealtimeQAMonitor:
         user_id = message_data["user_id"]
         timestamp = message_data["timestamp"]
         
-        # Get recent unanswered questions from this channel
+        # Get ALL unanswered questions from this channel (no timeout)
         recent_questions = self.db_manager.find_recent_questions(
-            channel_id, hours=self.config.ANSWER_TIMEOUT_HOURS
+            channel_id, hours=None
         )
         
         if not recent_questions:
@@ -235,7 +243,65 @@ class RealtimeQAMonitor:
                 self.db_manager.store_qa_pair(qa_pair)
                 print(f"✅ Stored Q&A pair for backward compatibility")
                 
-                break  # Only match to the first question for now
+                # Continue checking other questions - one message can answer multiple questions
+    
+    def find_similar_question(self, channel_id: str, question_text: str, question_analysis: Dict) -> Optional[int]:
+        """Find existing questions that are similar/related to this one."""
+        # Get recent questions from the same channel
+        existing_questions = self.db_manager.find_recent_questions(channel_id, hours=72)  # Look at last 3 days for clustering
+        
+        if not existing_questions:
+            return None
+        
+        # Use OpenAI to find similar questions
+        try:
+            similar_question = self.openai_analyzer.find_similar_question(
+                question_text, existing_questions
+            )
+            
+            if similar_question and similar_question.get("is_similar", False):
+                similarity_score = similar_question.get("similarity_score", 0)
+                if similarity_score >= 0.8:  # High similarity threshold for merging
+                    return similar_question["question_id"]
+                    
+        except Exception as e:
+            print(f"❌ Error finding similar questions: {e}")
+            
+        return None
+    
+    def update_clustered_question(self, question_id: int, new_question_text: str, user_name: str, timestamp: datetime):
+        """Update an existing question by clustering with a new related question."""
+        try:
+            # Get the existing question
+            existing_question = self.db_manager.get_question_by_id(question_id)
+            if not existing_question:
+                return
+                
+            # Use OpenAI to create a generalized version that covers both questions
+            generalized_question = self.openai_analyzer.generalize_questions(
+                existing_question["text"], new_question_text
+            )
+            
+            if generalized_question and generalized_question.get("generalized_text"):
+                # Update the existing question with the generalized version
+                updated_metadata = json.loads(existing_question.get("metadata", "{}"))
+                updated_metadata["clustered_questions"] = updated_metadata.get("clustered_questions", [])
+                updated_metadata["clustered_questions"].append({
+                    "text": new_question_text,
+                    "user": user_name,
+                    "timestamp": timestamp.isoformat()
+                })
+                updated_metadata["last_updated"] = datetime.now().isoformat()
+                
+                self.db_manager.update_question(
+                    question_id,
+                    text=generalized_question["generalized_text"],
+                    metadata=updated_metadata
+                )
+                print(f"🔄 Updated question {question_id} with generalized version")
+                
+        except Exception as e:
+            print(f"❌ Error updating clustered question: {e}")
     
     def start_monitoring(self):
         """Start real-time monitoring."""
