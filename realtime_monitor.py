@@ -17,8 +17,10 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 
 from config.config_manager import get_required_env_vars, PipelineConfig
 from database.database_manager import DatabaseManager
+from database.production_database import ProductionDatabaseManager
 from core.openai_analyzer import OpenAIAnalyzer
 from core.message_processor import MessageProcessor
+import os
 
 
 class RealtimeQAMonitor:
@@ -35,8 +37,12 @@ class RealtimeQAMonitor:
             web_client=self.web_client
         )
         
-        # Initialize components
-        self.db_manager = DatabaseManager()
+        # Initialize components - use PostgreSQL if available, SQLite as fallback
+        database_url = os.environ.get('DATABASE_URL')
+        if database_url:
+            self.db_manager = ProductionDatabaseManager(database_url)
+        else:
+            self.db_manager = DatabaseManager()
         self.openai_analyzer = OpenAIAnalyzer()
         self.message_processor = MessageProcessor()
         

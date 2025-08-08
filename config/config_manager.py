@@ -63,7 +63,7 @@ class PipelineConfig:
         self.CONTEXT_WINDOW_SIZE = 25      # Larger windows = fewer OpenAI calls
         self.MIN_CONVERSATION_LENGTH = 50
         self.MIN_ANSWER_LENGTH = 10
-        self.OPENAI_MODEL = "o3"
+        self.OPENAI_MODEL = "gpt-4o-mini"
         self.OPENAI_MAX_TOKENS = 1000
         
         # Optimized for Slack rate limits
