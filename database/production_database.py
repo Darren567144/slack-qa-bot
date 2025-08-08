@@ -457,13 +457,17 @@ class ProductionDatabaseManager:
     # Add other methods from DatabaseManager for full compatibility
     def store_question(self, question_data: Dict) -> Optional[int]:
         """Store a question."""
-        # Implementation would be similar to store_qa_pair
-        pass
+        if self.is_postgres:
+            return self._store_question_postgres(question_data)
+        else:
+            return self._store_question_sqlite(question_data)
     
     def store_answer(self, answer_data: Dict, question_id: Optional[int] = None) -> Optional[int]:
         """Store an answer."""
-        # Implementation would be similar to store_qa_pair
-        pass
+        if self.is_postgres:
+            return self._store_answer_postgres(answer_data, question_id)
+        else:
+            return self._store_answer_sqlite(answer_data, question_id)
     
     def find_recent_questions(self, channel_id: str, hours: Optional[int] = 24) -> List[Dict]:
         """Find unanswered questions in a channel. If hours=None, get ALL unanswered questions."""
@@ -576,15 +580,152 @@ class ProductionDatabaseManager:
     
     def is_message_processed(self, message_ts: str) -> bool:
         """Check if message was processed."""
-        # Implementation would check processed_messages table
-        pass
+        if self.is_postgres:
+            return self._is_message_processed_postgres(message_ts)
+        else:
+            return self._is_message_processed_sqlite(message_ts)
     
     def mark_message_processed(self, message_ts: str, channel_id: str):
         """Mark message as processed."""
-        # Implementation would insert into processed_messages
-        pass
+        if self.is_postgres:
+            self._mark_message_processed_postgres(message_ts, channel_id)
+        else:
+            self._mark_message_processed_sqlite(message_ts, channel_id)
     
     def export_to_csv(self, output_file: str, table: str = 'qa_pairs'):
         """Export data to CSV."""
         # Implementation would export table to CSV
         pass
+    
+    def _store_question_postgres(self, question_data: Dict) -> Optional[int]:
+        """Store question in PostgreSQL."""
+        import psycopg
+        import json
+        
+        try:
+            conn = psycopg.connect(self.postgres_url)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO questions 
+                (text, user_id, user_name, channel_id, timestamp, message_ts, confidence_score, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (message_ts) DO NOTHING
+                RETURNING id
+            """, (
+                question_data['text'],
+                question_data.get('user_id'),
+                question_data.get('user_name'),
+                question_data.get('channel_id'),
+                question_data.get('timestamp'),
+                question_data.get('message_ts'),
+                question_data.get('confidence_score'),
+                json.dumps(question_data.get('metadata', {}))
+            ))
+            
+            result = cursor.fetchone()
+            question_id = result[0] if result else None
+            
+            conn.commit()
+            conn.close()
+            
+            return question_id
+            
+        except Exception as e:
+            print(f"❌ Error storing question in PostgreSQL: {e}")
+            return None
+    
+    def _store_question_sqlite(self, question_data: Dict) -> Optional[int]:
+        """Store question in SQLite (fallback)."""
+        # Would implement SQLite version if needed
+        pass
+    
+    def _store_answer_postgres(self, answer_data: Dict, question_id: Optional[int] = None) -> Optional[int]:
+        """Store answer in PostgreSQL."""
+        import psycopg
+        import json
+        
+        try:
+            conn = psycopg.connect(self.postgres_url)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO answers 
+                (question_id, text, user_id, user_name, channel_id, timestamp, message_ts, confidence_score, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (message_ts) DO NOTHING
+                RETURNING id
+            """, (
+                question_id,
+                answer_data['text'],
+                answer_data.get('user_id'),
+                answer_data.get('user_name'),
+                answer_data.get('channel_id'),
+                answer_data.get('timestamp'),
+                answer_data.get('message_ts'),
+                answer_data.get('confidence_score'),
+                json.dumps(answer_data.get('metadata', {}))
+            ))
+            
+            result = cursor.fetchone()
+            answer_id = result[0] if result else None
+            
+            conn.commit()
+            conn.close()
+            
+            return answer_id
+            
+        except Exception as e:
+            print(f"❌ Error storing answer in PostgreSQL: {e}")
+            return None
+    
+    def _store_answer_sqlite(self, answer_data: Dict, question_id: Optional[int] = None) -> Optional[int]:
+        """Store answer in SQLite (fallback)."""
+        # Would implement SQLite version if needed
+        pass
+    
+    def _is_message_processed_postgres(self, message_ts: str) -> bool:
+        """Check if message was processed in PostgreSQL."""
+        import psycopg
+        
+        try:
+            conn = psycopg.connect(self.postgres_url)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT 1 FROM processed_messages WHERE message_ts = %s", (message_ts,))
+            result = cursor.fetchone()
+            
+            conn.close()
+            return result is not None
+            
+        except Exception as e:
+            print(f"❌ Error checking processed message in PostgreSQL: {e}")
+            return False
+    
+    def _is_message_processed_sqlite(self, message_ts: str) -> bool:
+        """Check if message was processed in SQLite."""
+        return False  # Fallback
+    
+    def _mark_message_processed_postgres(self, message_ts: str, channel_id: str):
+        """Mark message as processed in PostgreSQL."""
+        import psycopg
+        
+        try:
+            conn = psycopg.connect(self.postgres_url)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO processed_messages (message_ts, channel_id)
+                VALUES (%s, %s)
+                ON CONFLICT (message_ts) DO NOTHING
+            """, (message_ts, channel_id))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            print(f"❌ Error marking message processed in PostgreSQL: {e}")
+    
+    def _mark_message_processed_sqlite(self, message_ts: str, channel_id: str):
+        """Mark message as processed in SQLite."""
+        pass  # Fallback

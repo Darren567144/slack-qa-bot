@@ -183,7 +183,7 @@ class RealtimeQAMonitor:
                 }
                 
                 question_id = self.db_manager.store_question(question_data)
-                print(f"✅ Stored new question with ID: {question_id}")
+                self.logger.info(f"✅ Stored new question with ID: {question_id}")
         
         # Always check if message could be an answer (even if it's also a question)
         self.check_for_answers(message_data, user_name)
