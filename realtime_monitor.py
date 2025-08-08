@@ -5,6 +5,7 @@ Real-time Slack message monitoring and Q&A detection using Socket Mode.
 import time
 import threading
 import json
+import logging
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from typing import Dict, List, Optional
@@ -52,10 +53,13 @@ class RealtimeQAMonitor:
         self.processing_thread = None
         self.running = False
         
-        print(f"🚀 Real-time Q&A Monitor initialized")
-        print(f"   Database: {self.db_manager.db_path}")
-        print(f"   Question threshold: {self.config.QUESTION_DETECTION_THRESHOLD}")
-        print(f"   Answer threshold: {self.config.ANSWER_DETECTION_THRESHOLD}")
+        # Set up logging
+        self.logger = logging.getLogger(__name__)
+        
+        self.logger.info(f"🚀 Real-time Q&A Monitor initialized")
+        self.logger.info(f"   Database: {self.db_manager.db_path}")
+        self.logger.info(f"   Question threshold: {self.config.QUESTION_DETECTION_THRESHOLD}")
+        self.logger.info(f"   Answer threshold: {self.config.ANSWER_DETECTION_THRESHOLD}")
         
         # Track which channels have been fully scanned
         self.scanned_channels = set()
@@ -147,13 +151,13 @@ class RealtimeQAMonitor:
         if question_analysis.get("is_question", False):
             # Always store questions regardless of confidence threshold
             
-            print(f"❓ Detected question (confidence: {question_analysis['confidence']:.2f}): {message_text[:100]}...")
+            self.logger.info(f"❓ Detected question (confidence: {question_analysis['confidence']:.2f}): {message_text[:100]}...")
             
             # Check for similar existing questions to potentially merge/cluster
             similar_question_id = self.find_similar_question(channel_id, message_text, question_analysis)
             
             if similar_question_id:
-                print(f"🔗 Found similar question {similar_question_id}, updating existing question")
+                self.logger.info(f"🔗 Found similar question {similar_question_id}, updating existing question")
                 self.update_clustered_question(similar_question_id, message_text, user_name, timestamp)
             else:
                 # Store new question in database
@@ -335,10 +339,15 @@ class RealtimeQAMonitor:
                 channel_id = channel["id"]
                 channel_name = channel.get("name", "unknown")
                 
-                print(f"🔍 [{i}/{len(unscanned_channels)}] Scanning #{channel_name} ({channel_id})")
+                self.logger.info(f"🔍 [{i}/{len(unscanned_channels)}] Scanning #{channel_name} ({channel_id})")
                 
                 message_count = self.scan_channel_history(channel_id)
                 self.mark_channel_scanned(channel_id, message_count)
+                
+                # Log progress every 5 channels
+                if i % 5 == 0 or i == len(unscanned_channels):
+                    stats = self.db_manager.get_statistics()
+                    self.logger.info(f"📊 Progress: {i}/{len(unscanned_channels)} channels | {stats.get('questions', 0)} questions | {stats.get('qa_pairs', 0)} Q&A pairs found")
                 
                 # Small delay to respect rate limits
                 time.sleep(1)
@@ -403,7 +412,10 @@ class RealtimeQAMonitor:
                 # Rate limiting delay
                 time.sleep(0.5)
             
-            print(f"  ✅ Processed {message_count} messages from channel")
+            if message_count > 0:
+                self.logger.info(f"  ✅ Processed {message_count} new messages from channel")
+            else:
+                self.logger.info(f"  ⏭️  No new messages to process in channel")
             return message_count
             
         except Exception as e:
