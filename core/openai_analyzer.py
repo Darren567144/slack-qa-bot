@@ -41,7 +41,6 @@ If no clear Q&A pairs exist, return: []"""
                     }
                 ],
                 max_completion_tokens=self.config.OPENAI_MAX_TOKENS,
-                temperature=self.config.OPENAI_TEMPERATURE
             )
             
             result_text = response.choices[0].message.content.strip()
@@ -89,7 +88,6 @@ Return ONLY a JSON object:
                     }
                 ],
                 max_completion_tokens=100,
-                temperature=0.1
             )
             
             result_text = response.choices[0].message.content.strip()
@@ -136,7 +134,6 @@ Return ONLY a JSON object:
                     }
                 ],
                 max_completion_tokens=100,
-                temperature=0.1
             )
             
             result_text = response.choices[0].message.content.strip()
@@ -186,7 +183,6 @@ Use high similarity threshold (0.8+) for true matches."""
                     }
                 ],
                 max_completion_tokens=200,
-                temperature=0.1
             )
             
             result_text = response.choices[0].message.content.strip()
@@ -230,7 +226,6 @@ Return ONLY a JSON object:
                     }
                 ],
                 max_completion_tokens=200,
-                temperature=0.2
             )
             
             result_text = response.choices[0].message.content.strip()

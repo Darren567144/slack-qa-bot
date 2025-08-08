@@ -65,7 +65,6 @@ class PipelineConfig:
         self.MIN_ANSWER_LENGTH = 10
         self.OPENAI_MODEL = "o3"
         self.OPENAI_MAX_TOKENS = 1000
-        self.OPENAI_TEMPERATURE = 0.1
         
         # Optimized for Slack rate limits
         self.SLACK_API_BATCH_SIZE = 200  # Max messages per request (Slack limit)
