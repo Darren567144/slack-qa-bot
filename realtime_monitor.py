@@ -56,6 +56,9 @@ class RealtimeQAMonitor:
         print(f"   Database: {self.db_manager.db_path}")
         print(f"   Question threshold: {self.config.QUESTION_DETECTION_THRESHOLD}")
         print(f"   Answer threshold: {self.config.ANSWER_DETECTION_THRESHOLD}")
+        
+        # Track which channels have been fully scanned
+        self.scanned_channels = set()
     
     def get_user_name(self, user_id: str) -> str:
         """Get user name with caching."""
@@ -303,13 +306,138 @@ class RealtimeQAMonitor:
         except Exception as e:
             print(f"❌ Error updating clustered question: {e}")
     
+    def scan_all_channels_history(self):
+        """Scan historical messages from all accessible channels."""
+        try:
+            # Get only private channels the bot has access to
+            print("📋 Getting list of private channels...")
+            channels_response = self.web_client.conversations_list(
+                types="private_channel",
+                limit=1000
+            )
+            
+            all_channels = channels_response["channels"]
+            print(f"📊 Found {len(all_channels)} private channels")
+            
+            # Load previously scanned channels from database
+            self.load_scanned_channels()
+            unscanned_channels = [ch for ch in all_channels if ch["id"] not in self.scanned_channels]
+            
+            print(f"✅ Already scanned: {len(self.scanned_channels)} channels")
+            print(f"🔍 Need to scan: {len(unscanned_channels)} channels")
+            
+            if not unscanned_channels:
+                print("🎉 All channels already scanned!")
+                return
+            
+            # Scan each unscanned channel
+            for i, channel in enumerate(unscanned_channels, 1):
+                channel_id = channel["id"]
+                channel_name = channel.get("name", "unknown")
+                
+                print(f"🔍 [{i}/{len(unscanned_channels)}] Scanning #{channel_name} ({channel_id})")
+                
+                message_count = self.scan_channel_history(channel_id)
+                self.mark_channel_scanned(channel_id, message_count)
+                
+                # Small delay to respect rate limits
+                time.sleep(1)
+            
+            print("✅ Historical scan of all channels complete!")
+            
+        except Exception as e:
+            print(f"❌ Error scanning all channels: {e}")
+    
+    def scan_channel_history(self, channel_id: str) -> int:
+        """Scan all historical messages in a specific channel."""
+        try:
+            message_count = 0
+            cursor = None
+            
+            while True:
+                # Get batch of messages
+                kwargs = {
+                    "channel": channel_id,
+                    "limit": 100  # Max per request
+                }
+                if cursor:
+                    kwargs["cursor"] = cursor
+                
+                response = self.web_client.conversations_history(**kwargs)
+                messages = response["messages"]
+                
+                if not messages:
+                    break
+                
+                # Process messages in chronological order (oldest first)
+                for message in reversed(messages):
+                    if (message.get("type") == "message" and 
+                        message.get("subtype") is None and 
+                        message.get("user")):  # Skip bot messages, joins, etc.
+                        
+                        # Convert to our message format
+                        message_data = {
+                            "channel_id": channel_id,
+                            "user_id": message["user"],
+                            "text": message.get("text", "").strip(),
+                            "ts": message["ts"],
+                            "timestamp": datetime.fromtimestamp(float(message["ts"]))
+                        }
+                        
+                        # Only process if not already processed and has content
+                        if (message_data["text"] and 
+                            not self.db_manager.is_message_processed(message_data["ts"])):
+                            
+                            self.process_single_message(message_data)
+                            self.db_manager.mark_message_processed(message_data["ts"], channel_id)
+                            message_count += 1
+                
+                # Check if there are more messages
+                if not response.get("has_more"):
+                    break
+                
+                cursor = response.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+                
+                # Rate limiting delay
+                time.sleep(0.5)
+            
+            print(f"  ✅ Processed {message_count} messages from channel")
+            return message_count
+            
+        except Exception as e:
+            print(f"❌ Error scanning channel {channel_id}: {e}")
+            return 0
+    
+    def load_scanned_channels(self):
+        """Load list of previously scanned channels from database."""
+        try:
+            scanned_list = self.db_manager.get_scanned_channels()
+            self.scanned_channels = set(scanned_list)
+        except Exception as e:
+            print(f"❌ Error loading scanned channels: {e}")
+            self.scanned_channels = set()
+    
+    def mark_channel_scanned(self, channel_id: str, message_count: int):
+        """Mark a channel as fully scanned."""
+        try:
+            self.db_manager.mark_channel_scanned(channel_id, message_count)
+            self.scanned_channels.add(channel_id)
+        except Exception as e:
+            print(f"❌ Error marking channel as scanned: {e}")
+    
     def start_monitoring(self):
         """Start real-time monitoring."""
         if not self.config.REALTIME_ENABLED:
             print("⚠️  Real-time monitoring is disabled in config")
             return
         
-        print("🚀 Starting real-time Q&A monitoring...")
+        # First, do complete historical scan of all channels
+        print("🔄 Starting complete historical scan of all channels...")
+        self.scan_all_channels_history()
+        
+        print("🚀 Historical scan complete. Starting real-time Q&A monitoring...")
         
         # Set up event handler
         self.socket_client.socket_mode_request_listeners.append(self.handle_message_event)

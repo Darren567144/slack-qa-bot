@@ -85,6 +85,16 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_answers_channel ON answers(channel_id);
                 CREATE INDEX IF NOT EXISTS idx_qa_pairs_channel ON qa_pairs(channel);
                 CREATE INDEX IF NOT EXISTS idx_processed_messages_ts ON processed_messages(message_ts);
+                
+                -- Scanned channels table to track which channels have been fully processed
+                CREATE TABLE IF NOT EXISTS scanned_channels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_id TEXT UNIQUE NOT NULL,
+                    scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    message_count INTEGER DEFAULT 0
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_scanned_channels_id ON scanned_channels(channel_id);
             """)
         print(f"✅ Database initialized at {self.db_path}")
     
@@ -234,6 +244,29 @@ class DatabaseManager:
                 query = f"UPDATE questions SET {', '.join(updates)} WHERE id = ?"
                 params.append(question_id)
                 cursor.execute(query, params)
+    
+    def get_scanned_channels(self) -> List[str]:
+        """Get list of channel IDs that have been fully scanned."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT channel_id FROM scanned_channels")
+            return [row[0] for row in cursor.fetchall()]
+    
+    def mark_channel_scanned(self, channel_id: str, message_count: int):
+        """Mark a channel as fully scanned."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO scanned_channels (channel_id, message_count)
+                VALUES (?, ?)
+            """, (channel_id, message_count))
+    
+    def is_channel_scanned(self, channel_id: str) -> bool:
+        """Check if a channel has been fully scanned."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM scanned_channels WHERE channel_id = ?", (channel_id,))
+            return cursor.fetchone() is not None
     
     def is_message_processed(self, message_ts: str) -> bool:
         """Check if a message has already been processed."""
