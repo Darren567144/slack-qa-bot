@@ -40,7 +40,7 @@ If no clear Q&A pairs exist, return: []"""
                         "content": f"Analyze this conversation:\n\n{conversation_text}"
                     }
                 ],
-                max_tokens=self.config.OPENAI_MAX_TOKENS,
+                max_completion_tokens=self.config.OPENAI_MAX_TOKENS,
                 temperature=self.config.OPENAI_TEMPERATURE
             )
             
@@ -88,7 +88,7 @@ Return ONLY a JSON object:
                         "content": f"Message: {message_text}"
                     }
                 ],
-                max_tokens=100,
+                max_completion_tokens=100,
                 temperature=0.1
             )
             
@@ -135,7 +135,7 @@ Return ONLY a JSON object:
                         "content": f"Question: {question_text}\n\nPotential Answer: {potential_answer}{context_prompt}"
                     }
                 ],
-                max_tokens=100,
+                max_completion_tokens=100,
                 temperature=0.1
             )
             
@@ -185,7 +185,7 @@ Use high similarity threshold (0.8+) for true matches."""
                         "content": f"New Question: {new_question}\n\nExisting Questions:\n{questions_text}"
                     }
                 ],
-                max_tokens=200,
+                max_completion_tokens=200,
                 temperature=0.1
             )
             
@@ -229,7 +229,7 @@ Return ONLY a JSON object:
                         "content": f"Original Question: {original_question}\n\nNew Related Question: {new_question}"
                     }
                 ],
-                max_tokens=200,
+                max_completion_tokens=200,
                 temperature=0.2
             )
             
