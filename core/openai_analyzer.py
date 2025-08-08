@@ -3,7 +3,7 @@
 OpenAI integration for Q&A pair extraction from conversations.
 """
 import json
-import openai
+from openai import OpenAI
 from config.config_manager import get_required_env_vars, PipelineConfig
 
 
@@ -12,13 +12,13 @@ class OpenAIAnalyzer:
     
     def __init__(self):
         env_vars = get_required_env_vars()
-        openai.api_key = env_vars['OPENAI_API_KEY']
+        self.client = OpenAI(api_key=env_vars['OPENAI_API_KEY'])
         self.config = PipelineConfig()
     
     def extract_qa_pairs_from_conversation(self, conversation_text):
         """Call OpenAI to analyze conversation for Q&A pairs."""
         try:
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.config.OPENAI_MODEL,
                 messages=[
                     {
@@ -67,7 +67,7 @@ If no clear Q&A pairs exist, return: []"""
     def is_question(self, message_text: str) -> dict:
         """Analyze if a single message is a question and return confidence score."""
         try:
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.config.OPENAI_MODEL,
                 messages=[
                     {
@@ -114,7 +114,7 @@ Return ONLY a JSON object:
         try:
             context_prompt = f"\n\nContext: {context}" if context else ""
             
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.config.OPENAI_MODEL,
                 messages=[
                     {
@@ -163,7 +163,7 @@ Return ONLY a JSON object:
                 f"ID: {q['id']} - {q['text']}" for q in existing_questions[:10]  # Limit to avoid token overflow
             ])
             
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.config.OPENAI_MODEL,
                 messages=[
                     {
@@ -209,7 +209,7 @@ Use high similarity threshold (0.8+) for true matches."""
     def generalize_questions(self, original_question: str, new_question: str) -> dict:
         """Create a generalized version that covers both related questions."""
         try:
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.config.OPENAI_MODEL,
                 messages=[
                     {
